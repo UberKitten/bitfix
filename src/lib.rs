@@ -17,7 +17,7 @@ use windows::Win32::System::{
     Threading::GetCurrentProcess,
 };
 
-proxy_dll::proxy_dll!([d3d9, d3d11, x3daudio1_7], init);
+proxy_dll::proxy_dll!([winmm], init);
 
 const FIXES_DIR: &str = "fixes";
 const CFG_FILE: &str = "bitfix.cfg";

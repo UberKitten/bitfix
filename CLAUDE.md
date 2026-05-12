@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-bitfix is a Lua-scriptable runtime binary patcher for Windows games. It builds as a `cdylib` that gets dropped next to the target `.exe` under a name the game's loader will pull in (e.g. `d3d9.dll`, `d3d11.dll`, `x3daudio1_7.dll`) — proxy DLL forwarding to the real system DLL is handled by the `proxy_dll` crate.
+bitfix is a Lua-scriptable runtime binary patcher for Windows games. It builds as a `cdylib` that gets dropped next to the target `.exe` under a name the game's loader will pull in. We hijack `winmm.dll` because UE4 imports it eagerly for multimedia timing. We initially tried `xinput1_3.dll` but DRG's xinput load is lazy and the DLL never got loaded; `winmm` loads at exe-init time and works reliably. This also keeps us out of mint's way — mint deploys its combined loader at `d3d11.dll` (which embeds an old bitfix v0.1.0 inside it). Proxy DLL forwarding to the real system DLL is handled by the `proxy_dll` crate.
 
 ## Build / test
 
@@ -17,13 +17,13 @@ cargo test                                             # runs the in-tree tests
 cargo test test_lua -- --nocapture                     # see println/log output from the lua test
 ```
 
-Releases: pushing to `master` triggers `.github/workflows/release.yml`, which cross-compiles via mingw-w64 and publishes a zip (containing `bitfix.dll`, `fixes/`, `README.md`, `LICENSE`) to the `latest` prerelease tag.
+Releases: pushing to `master` triggers `.github/workflows/release.yml`, which cross-compiles via mingw-w64 and publishes a release tagged `v{cargo_version}-{sha7}`. The zip contains `winmm.dll` (renamed from `bitfix.dll`), `fixes/`, `README.md`, `LICENSE`, and is uploaded under the stable filename `bitfix.zip` so `releases/latest/download/bitfix.zip` always points to the newest build.
 
 ## Architecture
 
 Single crate, all code in `src/lib.rs`. Flow:
 
-1. **Entry:** `proxy_dll::proxy_dll!([d3d9, d3d11, x3daudio1_7], init)` generates the `DllMain` and the forwarder exports for any of those three DLL names. The macro arranges for `init()` to fire on attach.
+1. **Entry:** `proxy_dll::proxy_dll!([winmm], init)` generates the `DllMain` and the forwarder exports for `winmm`. The macro arranges for `init()` to fire on attach. If a future game needs a different hijack name, the macro's first arg is the list; `proxy_dll` ships def files for `d3d9`, `d3d11`, `x3daudio1_7`, `xinput1_3`, `winmm`, `version`, `msvcp140`, `vcruntime140`.
 2. **`setup()`** initializes a rolling file logger at `<exe_dir>/bitfix.txt` (no console — the host process is the game).
 3. **`patch()`** uses `GetModuleHandleA(None)` + `GetModuleInformation` to grab the main module's base/size, wraps it in a `RawMemory` (one page covering the whole image), then loads every `*.lua` file from `<exe_dir>/fixes/`.
 4. **`exec_patches()`** is the Lua engine. Each `.lua` returns a table of the form `{ name, description, category, default, patches = { ... } }`. The metadata fields drive the config UX; `patches` is an array (or map) of `{ pattern, match }` entries. Patterns are AOB strings (hex bytes + `??` wildcards) parsed by `patternsleuth_scanner`. After all configs are collected and the enabled-set is resolved (see below), every page is scanned once with the full pattern set; for each match the corresponding `match` closure is called with a `MatchContext` userdata.

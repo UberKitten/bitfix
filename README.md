@@ -2,6 +2,8 @@
 
 A small Lua-scriptable runtime binary patcher for Windows games. Ships with a curated set of fixes for **Deep Rock Galactic**.
 
+Compatible with [mint](https://github.com/trumank/mint), the third-party DRG mod manager. mint and bitfix coexist; you can run both.
+
 ## Install
 
 1. Download [bitfix.zip](https://github.com/UberKitten/bitfix/releases/latest/download/bitfix.zip).
@@ -49,50 +51,35 @@ Startup adds maybe a second or two while the pattern scan runs. That's it.
 
 ## Uninstall
 
-Delete `x3daudio1_7.dll` and the `fixes/` folder from your game folder. The game goes back to vanilla. You can also delete `bitfix.cfg` and `bitfix.txt` if you want a clean wipe.
+Delete `winmm.dll` and the `fixes/` folder from your game folder. The game goes back to vanilla. You can also delete `bitfix.cfg` and `bitfix.txt` if you want a clean wipe.
 
 ## Something broken?
 
 1. Check `bitfix.txt` next to the game `.exe`. It logs every loaded fix, every pattern match, and any errors.
 2. If a fix's pattern didn't match the current game build, you'll see `no pattern match for <fix>/<label>` in the log. Disable that fix in `bitfix.cfg` and report it.
-3. To rule out bitfix entirely, delete `x3daudio1_7.dll` from the game folder and launch.
+3. To rule out bitfix entirely, delete `winmm.dll` from the game folder and launch.
 
-## Writing your own fix
+### Catching new crashes
 
-Each `.lua` in `fixes/` returns a single table:
+When a fresh crash shows up that nobody has a fix for yet, the most useful thing you can do is collect a **full crash dump** and share it. To enable full dumps:
 
-```lua
-return {
-    name = "My Fix",
-    description = "what the fix does (shown as a comment in bitfix.cfg)",
-    category = "crash",   -- "crash", "gameplay", "visual", or any custom category
-    role = "host",        -- "host" or "client" (defaults to "host" if omitted)
-    default = false,      -- on by default if true; user can still override in bitfix.cfg
-    patches = {
-        {
-            pattern = '48 89 5C 24 ?? ...',   -- AOB; '??' is a wildcard byte
-            match = function(ctx)
-                -- ctx:address() = address of this match
-                -- ctx:index() = which occurrence (0-based) within this scan
-                -- ctx[addr] = byte at addr (read or write)
-                ctx[ctx:address() + 0x10] = 0xEB
-            end
-        },
-    }
-}
+1. In Steam, right-click **Deep Rock Galactic > Properties**.
+2. Under **General > Launch Options**, add: `-fullcrashdumpalways`
+3. Close Properties. The next time the game crashes, a full dump is written automatically.
+
+Dumps land in:
+
+```
+%LOCALAPPDATA%\FSD\Saved\Crashes\
 ```
 
-See the existing files in `fixes/` for working examples covering nop, jmp, immediate-byte, and conditional-branch patches.
+(paste that into Explorer's address bar). Each crash gets its own timestamped subfolder containing the dump (`.dmp`), a log, and metadata. Zip up the whole subfolder if you want to share.
 
-## Building
+**Warning:** full dumps are large. Each one is typically 2-5 GB and they pile up fast. Clear the `Crashes\` folder periodically, or remove `-fullcrashdumpalways` from launch options once you've captured what you need. Without that flag, the game writes much smaller minidumps that often miss the data you'd need to diagnose a new crash.
 
-Rust nightly (pinned via `rust-toolchain.toml`).
+## For developers
 
-```shell
-cargo build --release
-```
-
-The output is `target/release/bitfix.dll`. CI cross-compiles for `x86_64-pc-windows-gnu` on every push to `master` and publishes a release zip with the DLL renamed to `x3daudio1_7.dll`.
+See [DEVELOPING.md](DEVELOPING.md) for how to write your own fixes and build from source.
 
 ## License
 
