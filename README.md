@@ -4,14 +4,20 @@ A small Lua-scriptable runtime binary patcher for Windows games. Ships with a cu
 
 Compatible with [mint](https://github.com/trumank/mint), the third-party DRG mod manager. mint and bitfix coexist; you can run both.
 
-## Install
+## Install (and update)
 
 1. Download [bitfix.zip](https://github.com/UberKitten/bitfix/releases/latest/download/bitfix.zip).
 2. Find the folder containing the game's `.exe`. For Deep Rock Galactic on Steam:
    - Right-click DRG in Steam, **Manage > Browse local files**
    - Open `FSD\Binaries\Win64\`. You should see `FSD-Win64-Shipping.exe` in there.
-3. Extract everything from the zip into that folder.
+3. Extract everything from the zip into that folder, replacing existing files when prompted.
 4. Launch the game. Crash fixes apply automatically. A `bitfix.cfg` file and a `bitfix.txt` log are created next to the game `.exe` on first launch.
+
+**Updating is the same process** — download the latest zip and extract over the top. Your `bitfix.cfg` toggles are preserved.
+
+## Uninstall
+
+Delete `winmm.dll` and the `fixes/` folder from your game folder. The game goes back to vanilla. You can also delete `bitfix.cfg` and `bitfix.txt` if you want a clean wipe.
 
 ## Enabling and disabling fixes
 
@@ -48,10 +54,6 @@ Crash fixes are on by default. Everything else is off.
 No measurable in-game impact. bitfix does all of its work once while the game is starting up. It scans the game binary for the patterns of each enabled fix, writes a few bytes per match, and is done. There's no hook, no callback, and no Lua running during gameplay; the patches are just static byte changes to the binary in memory.
 
 Startup adds maybe a second or two while the pattern scan runs. That's it.
-
-## Uninstall
-
-Delete `winmm.dll` and the `fixes/` folder from your game folder. The game goes back to vanilla. You can also delete `bitfix.cfg` and `bitfix.txt` if you want a clean wipe.
 
 ## Something broken?
 
