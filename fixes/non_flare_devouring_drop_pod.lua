@@ -1,14 +1,22 @@
---[[ Stop the drop pod from eating flares (and any other RefinerySecondaryObjective
-     pickup) when it sucks dwarves up at extraction.
+--[[ Stop the drop pod (extraction dropship) and the refinery extractor pod
+     from eating flares (and any other RefinerySecondaryObjective pickup)
+     when they suck nearby actors into their pickup volumes.
 
   =================== Behavior this targets ===================
 
-  When the drop pod arrives at extraction and sucks the dwarves in, any flares
-  that happen to be in the suction radius get consumed too -- they vanish into
-  the pod with no payoff.  Same story for the M.U.L.E.-style team transport
-  pickup volume (see "Two match sites" below).  This patch makes both pickup
-  volumes silently ignore RefinerySecondaryObjective actors (flares are this
-  class) instead of consuming them.
+  Two in-game pods consume flares with the same idiom:
+
+    - The drop pod (the extraction dropship) -- when it arrives at extraction
+      and sucks the dwarves in, any flares in the suction radius get consumed
+      too.  The class name in the binary for the dropship is `TeamTransport`.
+
+    - The refinery extractor pod (the lift-off pod in Liquid Morkite "Refining"
+      missions) -- same flare-eating idiom when it completes its objective.
+      Class names in the binary: `RefineryExtractorPodWidget`,
+      `RefinerySecondaryObjective`.
+
+  This patch makes both pickup volumes silently ignore RefinerySecondaryObjective
+  actors (flares are this class) instead of consuming them.
 
   =================== Two match sites ===================
 
@@ -18,14 +26,15 @@
   destroy/consume helper:
 
     1) FUN_14182ad20 @ 0x14182ad20  (193 bytes; match at +0xBE = 0x14182adde)
-         Pulled in via URefineryExtractorPodWidget::OnObjectiveUpdated
-         (confirmed by the wide-string literal in callee FUN_141805c90).
-         Class lookups: RefineryExtractorPodWidget, FSDGameMode,
-         RefinerySecondaryObjective.
+         The REFINERY EXTRACTOR POD path.  Pulled in via
+         URefineryExtractorPodWidget::OnObjectiveUpdated (confirmed by the
+         wide-string literal in callee FUN_141805c90).  Class lookups:
+         RefineryExtractorPodWidget, FSDGameMode, RefinerySecondaryObjective.
 
     2) FUN_141899a30 @ 0x141899a30  (92 bytes; match at +0x37 = 0x141899a67)
-         Class lookup: TeamTransport.  Same interface-match-then-consume
-         idiom -- the team transport pickup volume eats flares too.
+         The DROP POD path.  Class lookup: TeamTransport (the dropship class).
+         Same interface-match-then-consume idiom -- the drop pod's pickup
+         volume eats flares too.
 
   Both sites are patched together because the pattern is symmetric and the
   desired behavior (don't eat flares) is the same in both.
@@ -91,7 +100,7 @@
 
 return {
     name = "Non-Flare-Devouring Drop Pod",
-    description = "Stop the drop pod (and team transport) from consuming flares at pickup",
+    description = "Stop the drop pod (TeamTransport) and the refinery extractor pod from consuming flares at pickup",
     category = "gameplay",
     role = "host",
     default = false,
