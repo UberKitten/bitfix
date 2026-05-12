@@ -164,6 +164,7 @@ return {
     name = "Stickier Flame",
     description = "Driller's sticky flames stick to enemies and any other actor, not just terrain",
     category = "gameplay",
+    role = "host",
     default = false,
     patches = {
         -- UStickyFlameSpawner::TrySpawnStickyFlameHit, RBP/RDI variant.

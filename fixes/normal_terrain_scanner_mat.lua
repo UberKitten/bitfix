@@ -110,6 +110,7 @@ return {
     name = "Normal Terrain Scanner Material",
     description = "Show normal terrain on the scanner instead of scanner material",
     category = "visual",
+    role = "client",
     default = false,
     patches = {
         {

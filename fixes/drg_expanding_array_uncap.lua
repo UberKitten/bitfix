@@ -122,6 +122,7 @@ return {
     name = "DRG ExpandingArray Uncap",
     description = "Dead-code the hardcoded MAXSIZE check in every Resize<T> (fixes 'ExpandingArray out of range' from heavy carving)",
     category = "crash",
+    role = "client",
     default = true,
     patches = {
         {

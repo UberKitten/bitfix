@@ -98,6 +98,7 @@ return {
     name = "DRG CSG Arena Bump",
     description = "Add +2 GiB of reserved VA to every FSDVirtualMem arena (fixes Commit error 487 from heavy carving)",
     category = "crash",
+    role = "client",
     default = true,
     patches = {
         {

@@ -201,6 +201,7 @@ return {
     name = "Increased Players Difficulty Scaling",
     description = "Allow difficulty scaling beyond 4 players (pairs with the crash fix)",
     category = "crash",
+    role = "host",
     default = true,
     patches = {
         -- Pattern #1: mov edx,4 / cmp eax,edx / cmovle edx,eax  (2 hits)

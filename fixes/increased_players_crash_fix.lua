@@ -171,6 +171,7 @@ return {
     name = "Increased Players Crash Fix",
     description = "Fix crash when >8 players are in the lobby during mission load",
     category = "crash",
+    role = "host",
     default = true,
     patches = {
         {

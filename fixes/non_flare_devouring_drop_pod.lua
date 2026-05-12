@@ -93,6 +93,7 @@ return {
     name = "Non-Flare-Devouring Drop Pod",
     description = "Stop the drop pod (and team transport) from consuming flares at pickup",
     category = "gameplay",
+    role = "host",
     default = false,
     patches = {
         {

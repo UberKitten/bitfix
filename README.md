@@ -20,23 +20,28 @@ A small Lua-scriptable runtime binary patcher for Windows games. Ships with a cu
 After the first launch you'll have a `bitfix.cfg` file next to the game `.exe`. Open it in Notepad. It looks like:
 
 ```
+# Role tags:
+#   [host-side]   = effective only when you host the lobby
+#   [client-side] = effective on your machine regardless of host
+
 # === Crash Fixes ===
-increased_players_crash_fix              = true   # Fix crash when >8 players in lobby...
-increased_players_difficulty_scaling_fix = true   # Allow difficulty scaling beyond 4 players...
+increased_players_crash_fix              = true  # [host-side] Fix crash when >8 players in lobby...
+increased_players_difficulty_scaling_fix = true  # [host-side] Allow difficulty scaling beyond 4 players...
 
 # === Gameplay ===
-max_attackers                = false  # Increase MaxAttackers cap to 200
-no_scatter                   = false  # Prevent explosions from scattering minerals
-non_flare_devouring_drop_pod = false  # Stop the drop pod from eating flares
-stickier_flame               = false  # Sticky flames stick to any actor, not just terrain
+max_attackers                = false  # [host-side] Raise simultaneous-attacker cap to 200
+no_scatter                   = false  # [host-side] Prevent explosions from scattering minerals
+non_flare_devouring_drop_pod = false  # [host-side] Stop the drop pod from eating flares
+stickier_flame               = false  # [host-side] Sticky flames stick to any actor, not just terrain
 
 # === Visual ===
-normal_terrain_scanner_mat = false  # Show normal terrain on the scanner...
+normal_terrain_scanner_mat = false  # [client-side] Show normal terrain on the scanner...
 ```
 
 Flip a `false` to `true` (or vice versa) for any fix you want, save the file, and launch the game.
 
 Notes:
+- **Role tags** tell you when a fix actually does anything. `[host-side]` fixes only take effect on the host's machine — turning one on as a client/joiner is harmless but does nothing. `[client-side]` fixes apply on whoever's screen they affect, regardless of who's hosting.
 - Crash fixes are on by default; everything else is off. You don't have to edit anything to get the crash fixes.
 - The file is regenerated each launch in canonical form, so any personal comments you add will be removed. Toggled values are preserved.
 - Sharing a config? Send a friend your `bitfix.cfg` — they drop it next to the `.exe` and they're done.
@@ -66,6 +71,7 @@ return {
     name = "My Fix",
     description = "what the fix does (shown as a comment in bitfix.cfg)",
     category = "crash",   -- "crash", "gameplay", "visual", or any custom category
+    role = "host",        -- "host" or "client" (defaults to "host" if omitted)
     default = false,      -- on by default if true; user can still override in bitfix.cfg
     patches = {
         {

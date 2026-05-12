@@ -152,6 +152,7 @@ return {
     name = "No Mineral Scatter",
     description = "Prevent explosions from scattering minerals (nitra/morkite/ore stay put when carved)",
     category = "gameplay",
+    role = "host",
     default = false,
     patches = {
         {

@@ -22,6 +22,7 @@ proxy_dll::proxy_dll!([d3d9, d3d11, x3daudio1_7], init);
 const FIXES_DIR: &str = "fixes";
 const CFG_FILE: &str = "bitfix.cfg";
 const DEFAULT_CATEGORY: &str = "other";
+const DEFAULT_ROLE: &str = "host";
 const CATEGORY_ORDER: &[&str] = &["crash", "gameplay", "visual", "other"];
 
 fn init() {
@@ -199,7 +200,16 @@ struct FixMeta {
     file_stem: String,
     description: String,
     category: String,
+    role: String,
     default_enabled: bool,
+}
+
+fn role_tag(role: &str) -> String {
+    match role {
+        "host" => "[host-side]".to_string(),
+        "client" => "[client-side]".to_string(),
+        other => format!("[{}]", other),
+    }
 }
 
 fn load_lua_files<P: AsRef<Path>>(path: P) -> Result<Vec<LuaFile>> {
@@ -282,6 +292,10 @@ fn render_cfg(metas: &[FixMeta], existing: &HashMap<String, bool>) -> String {
     buf.push_str("# bitfix.cfg — edit true/false to toggle fixes.\n");
     buf.push_str("# This file is regenerated on each launch; custom comments will be removed.\n");
     buf.push_str("# Entries are grouped by the category declared in each fix's .lua file.\n");
+    buf.push_str("#\n");
+    buf.push_str("# Role tags:\n");
+    buf.push_str("#   [host-side]   = effective only when you host the lobby\n");
+    buf.push_str("#   [client-side] = effective on your machine regardless of host\n");
     buf.push('\n');
 
     let mut by_cat: HashMap<&str, Vec<&FixMeta>> = HashMap::new();
@@ -314,14 +328,16 @@ fn render_cfg(metas: &[FixMeta], existing: &HashMap<String, bool>) -> String {
                 .unwrap_or(m.default_enabled);
             let v_str = if v { "true " } else { "false" };
             let pad = " ".repeat(key_pad - m.file_stem.len());
-            if m.description.is_empty() {
-                buf.push_str(&format!("{}{} = {}\n", m.file_stem, pad, v_str.trim_end()));
+            let tag = role_tag(&m.role);
+            let comment = if m.description.is_empty() {
+                tag
             } else {
-                buf.push_str(&format!(
-                    "{}{} = {}  # {}\n",
-                    m.file_stem, pad, v_str, m.description
-                ));
-            }
+                format!("{} {}", tag, m.description)
+            };
+            buf.push_str(&format!(
+                "{}{} = {}  # {}\n",
+                m.file_stem, pad, v_str, comment
+            ));
         }
         buf.push('\n');
     }
@@ -389,6 +405,9 @@ fn exec_patches<'wrapper, 'memory>(
             let category = table
                 .get::<_, String>("category")
                 .unwrap_or_else(|_| DEFAULT_CATEGORY.to_string());
+            let role = table
+                .get::<_, String>("role")
+                .unwrap_or_else(|_| DEFAULT_ROLE.to_string());
             let default_enabled = table.get::<_, bool>("default").unwrap_or(false);
 
             if table.get::<_, Value>("name").is_err() {
@@ -402,6 +421,7 @@ fn exec_patches<'wrapper, 'memory>(
                 file_stem: file.file_stem.clone(),
                 description,
                 category,
+                role,
                 default_enabled,
             });
 
@@ -461,9 +481,10 @@ fn exec_patches<'wrapper, 'memory>(
         for m in &metas {
             let on = *enabled_state.get(&m.file_stem).unwrap_or(&false);
             info!(
-                "fix {} [{}] = {}",
+                "fix {} [{}/{}] = {}",
                 m.file_stem,
                 m.category,
+                m.role,
                 if on { "ENABLED" } else { "disabled" }
             );
         }
@@ -622,18 +643,21 @@ mod test {
                 file_stem: "alpha".into(),
                 description: "first".into(),
                 category: "crash".into(),
+                role: "host".into(),
                 default_enabled: true,
             },
             FixMeta {
                 file_stem: "beta".into(),
                 description: "second".into(),
                 category: "gameplay".into(),
+                role: "client".into(),
                 default_enabled: false,
             },
             FixMeta {
                 file_stem: "gamma".into(),
                 description: "third".into(),
                 category: "crash".into(),
+                role: "host".into(),
                 default_enabled: true,
             },
         ];
@@ -643,6 +667,9 @@ mod test {
         let out = render_cfg(&metas, &empty);
         assert!(out.contains("=== Crash Fixes ==="));
         assert!(out.contains("=== Gameplay ==="));
+        // Role tags should render in the inline comments.
+        assert!(out.contains("[host-side] first"));
+        assert!(out.contains("[client-side] second"));
         // Defaults reflected
         let parsed = parse_cfg(&out);
         assert_eq!(parsed.get("alpha"), Some(&true));

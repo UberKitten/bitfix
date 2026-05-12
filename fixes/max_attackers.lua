@@ -135,6 +135,7 @@ return {
     name = "Max Attackers 200",
     description = "Raise simultaneous-attacker cap from stock to 200 (UAttackerPositioningComponent)",
     category = "gameplay",
+    role = "host",
     default = false,
     patches = {
         {
