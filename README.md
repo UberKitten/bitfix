@@ -41,6 +41,12 @@ Notes:
 - The file is regenerated each launch in canonical form, so any personal comments you add will be removed. Toggled values are preserved.
 - Sharing a config? Send a friend your `bitfix.cfg` — they drop it next to the `.exe` and they're done.
 
+## Will this slow down my game?
+
+No measurable in-game impact. bitfix does all of its work once while the game is starting up — it scans the game binary for the patterns of each enabled fix and writes a few bytes per match — then it's done. There's no hook, no callback, and no Lua running during gameplay; the patches are just static byte changes to the binary in memory.
+
+Startup adds maybe a second or two while the pattern scan runs. That's it.
+
 ## Uninstall
 
 Delete the file you renamed `bitfix.dll` to (e.g. `x3daudio1_7.dll`) and the `fixes/` folder. The game goes back to vanilla. You can also delete `bitfix.cfg` and `bitfix.txt` if you want a clean wipe.
