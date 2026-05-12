@@ -1,131 +1,92 @@
 # bitfix
-Simple Lua-scriptable runtime binary patcher
 
-## building
+A small Lua-scriptable runtime binary patcher for Windows games. Ships with a curated set of fixes for **Deep Rock Galactic** that load via a proxy DLL.
+
+## Install
+
+1. Download the latest `bitfix-<sha>.zip` from the [releases page](https://github.com/UberKitten/bitfix/releases).
+2. Extract the zip somewhere temporary.
+3. Find your game's main `.exe`. For Deep Rock Galactic on Steam this is usually:
+   ```
+   <Steam>\steamapps\common\Deep Rock Galactic\FSD\Binaries\Win64\FSD-Win64-Shipping.exe
+   ```
+4. Copy these next to that `.exe`:
+   - `bitfix.dll` — **rename it to one of:** `d3d9.dll`, `d3d11.dll`, or `x3daudio1_7.dll` (whichever the game loads; for DRG, `x3daudio1_7.dll` works).
+   - The `fixes/` folder.
+5. Launch the game. bitfix will run, create `bitfix.cfg` next to the game `.exe`, and apply any enabled fixes. A log is written to `bitfix.txt`.
+
+## Enabling / disabling fixes
+
+After the first launch you'll have a `bitfix.cfg` file next to the game `.exe`. Open it in Notepad. It looks like:
+
+```
+# === Crash Fixes ===
+increased_players_crash_fix              = true   # Fix crash when >8 players in lobby...
+increased_players_difficulty_scaling_fix = true   # Allow difficulty scaling beyond 4 players...
+
+# === Gameplay ===
+max_attackers                = false  # Increase MaxAttackers cap to 200
+no_scatter                   = false  # Prevent explosions from scattering minerals
+non_flare_devouring_drop_pod = false  # Stop the drop pod from eating flares
+stickier_flame               = false  # Sticky flames stick to any actor, not just terrain
+
+# === Visual ===
+normal_terrain_scanner_mat = false  # Show normal terrain on the scanner...
+```
+
+Flip a `false` to `true` (or vice versa) for any fix you want, save the file, and launch the game.
+
+Notes:
+- Crash fixes are on by default; everything else is off. You don't have to edit anything to get the crash fixes.
+- The file is regenerated each launch in canonical form, so any personal comments you add will be removed. Toggled values are preserved.
+- Sharing a config? Send a friend your `bitfix.cfg` — they drop it next to the `.exe` and they're done.
+
+## Uninstall
+
+Delete the file you renamed `bitfix.dll` to (e.g. `x3daudio1_7.dll`) and the `fixes/` folder. The game goes back to vanilla. You can also delete `bitfix.cfg` and `bitfix.txt` if you want a clean wipe.
+
+## Something broken?
+
+1. Check `bitfix.txt` next to the game `.exe` — it logs every loaded fix, every pattern match, and any errors.
+2. If a fix's pattern didn't match the current game build, you'll see `no pattern match for <fix>/<label>` in the log. Disable that fix in `bitfix.cfg` and report it.
+3. To rule out bitfix entirely, just delete the renamed DLL and launch the game.
+
+## Writing your own fix
+
+Each `.lua` in `fixes/` returns a single table:
+
+```lua
+return {
+    name = "My Fix",
+    description = "what the fix does (shown as a comment in bitfix.cfg)",
+    category = "crash",   -- "crash", "gameplay", "visual", or any custom category
+    default = false,      -- on by default if true; user can still override in bitfix.cfg
+    patches = {
+        {
+            pattern = '48 89 5C 24 ?? ...',   -- AOB; '??' is a wildcard byte
+            match = function(ctx)
+                -- ctx:address() = address of this match
+                -- ctx:index() = which occurrence (0-based) within this scan
+                -- ctx[addr] = byte at addr (read or write)
+                ctx[ctx:address() + 0x10] = 0xEB
+            end
+        },
+    }
+}
+```
+
+See the existing files in `fixes/` for working examples covering nop, jmp, immediate-byte, and conditional-branch patches.
+
+## Building
+
+Rust nightly (pinned via `rust-toolchain.toml`).
+
 ```shell
-$ cargo build --release
+cargo build --release
 ```
 
-## usage
-Copy `target/release/bitfix.dll` next to the exe to be patched and name it something that will get loaded, such as `d3d9.dll` or `x3daudio1_7.dll`.
-Lua patches will be loaded from a `bitfix/` directory.
+The output `target/release/bitfix.dll` is the artifact. CI cross-compiles for `x86_64-pc-windows-gnu` on every push to `master` and publishes a release zip.
 
+## License
 
-## examples
-
-Increasing `MaxAttackers` to 200 in DRG:
-```lua
--- bitfix/max_attackers.lua
-return {
-  {
-    --- UPlayerAttackPositionComponent::GetScore
-    pattern = '48 89 5C 24 08 48 89 6C 24 10 48 89 74 24 18 57 48 83 EC 30 48 8B 01 41 0F',
-    match = function(ctx)
-      ctx[ctx:address() + 89] = 200
-      ctx[ctx:address() + 187] = 200
-    end
-  },
-  {
-    --- UAttackerPositioningComponent::UAttackerPositioningComponent
-    pattern = '48 89 5C 24 08 48 89 6C 24 10 48 89 74 24 18 48 89 7C 24 20 41 56 48 81 EC D0 00 00 00 48 8B F9 E8 ?? ?? ?? ?? 48 8B D0 48 8B CF E8 ?? ?? ?? ?? 33 DB',
-    match = function(ctx)
-      ctx[ctx:address() + 56] = 200
-    end
-  }
-}
-```
-
-Allow sticky flames to stick to any actor, not just terrain:
-```lua
--- bitfix/stickier_flame.lua
-local patch = function(offset, distance)
-  return function(ctx)
-    ctx[ctx:address() + offset] = 0xEB
-    ctx[ctx:address() + offset + 1] = distance
-  end
-end
-return {
-  --- UStickyFlameSpawner::TrySpawnStickyFlameHit
-  {
-    pattern = '48 89 5c 24 08 48 89 6c 24 10 48 89 74 24 18 57 48 83 ec 70 48 8b f9 48 8b f2 48 8d 4a 68',
-    match = patch(0x2C, 0x32)
-  },
-  {
-    pattern = '48 89 5c 24 08 48 89 6c 24 10 48 89 74 24 18 57 48 83 ec 40 48 8b e9 48 8b fa 48 8d 4a 68',
-    match = patch(0x28, 0x2A)
-  },
-}
-```
-
-Stop the drop pod from eating flares. (why does it do this?)
-```lua
--- bitfix/non_flare_devouring_drop_pod.lua
-return {
-  {
-    pattern = '3B 51 ?? 7F ?? 48 8B 49 ?? 48 39 04 D1 75 ?? 48 8B D3 48 8B CF E8 ?? ?? ?? ?? 48 8B 5C 24',
-    match = function(ctx)
-      ctx[ctx:address() + 13] = 0xEB
-    end
-  },
-}
-```
-
-Fix game crashing if more than 8 players are in the lobby during mission load
-```lua
--- bitfix/increased_players_fix.lua
-return {
-  {
-    pattern = '48 8b c4 48 89 48 08 55 57 48 8d a8 58 ff ff ff 48 81 ec 98 01 00 00 48 83 79 30 00 48 8b f9 0f 84',
-    match = function(ctx)
-      ctx[ctx:address()] = 0xC3
-    end
-  }
-}
-```
-
-Allow scaling beyond hard coded limit of 4 players in a lobby.
-NOTE: Make sure all player count based arrays in difficulty settings have enough
-values for the number of players or bad things will happen!
-```lua
--- bitfix/increased_players_difficulty_scaling_fix.lua
-local patch = function(ctx)
-  ctx[ctx:address() + 1] = 0xff
-end
-return {
-  { match = patch, pattern = 'ba 04 00 00 00 3b c2 0f 4e d0' },
-  { match = patch, pattern = 'b9 04 00 00 00 3b c1 0f 4e c8' },
-  { match = patch, pattern = 'b9 04 00 00 00 8b 80 ?? ?? 00 00 3b c1 0f 4d c1' },
-  { match = patch, pattern = 'b9 04 00 00 00 8b 40 08 3b c1 0f 4d c1' },
-}
-```
-
-Show normal terrain on terrain scanner instead of scanner material.
-```lua
--- bitfix/normal_terrain_scanner_mat.lua
-return {
-  {
-    pattern = '74 ?? 49 8B 4C 24 ?? EB ?? 49 8B 0C 24',
-    match = function(ctx)
-      ctx[ctx:address()] = 0x75
-    end
-  }
-}
-```
-
-Prevent explosions from scattering minerals.
-```lua
--- bitfix/no-scatter.lua
-return {
-  {
-    --- FGrenadeExplodeOperation::FGrenadeExplodeOperation
-    pattern = 'f3 0f 11 43 ?? 76 14 f3',
-    match = function(ctx)
-      ctx[ctx:address() + 0x00] = 0x90
-      ctx[ctx:address() + 0x01] = 0x90
-      ctx[ctx:address() + 0x02] = 0x90
-      ctx[ctx:address() + 0x03] = 0x90
-      ctx[ctx:address() + 0x04] = 0x90
-    end
-  }
-}
-```
+MIT — see [LICENSE](LICENSE).

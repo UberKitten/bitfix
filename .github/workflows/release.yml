@@ -28,8 +28,14 @@ jobs:
       - name: Build
         run: cargo build --release --target x86_64-pc-windows-gnu
 
+      - name: Stage release
+        run: |
+          mkdir -p staging
+          cp README.md LICENSE target/x86_64-pc-windows-gnu/release/bitfix.dll staging/
+          cp -r fixes staging/
+
       - name: Archive
-        run: zip -j ${{ github.event.repository.name }}-${{ steps.vars.outputs.sha_short }}.zip README.md LICENSE target/x86_64-pc-windows-gnu/release/bitfix.dll
+        run: cd staging && zip -r ../${{ github.event.repository.name }}-${{ steps.vars.outputs.sha_short }}.zip .
 
       - name: Release
         uses: "marvinpinto/action-automatic-releases@latest"
