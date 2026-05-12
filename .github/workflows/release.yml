@@ -57,7 +57,8 @@ jobs:
       - name: Stage release
         run: |
           mkdir -p staging
-          cp README.md LICENSE target/x86_64-pc-windows-gnu/release/bitfix.dll staging/
+          cp README.md LICENSE staging/
+          cp target/x86_64-pc-windows-gnu/release/bitfix.dll staging/x3daudio1_7.dll
           cp -r fixes staging/
 
       - name: Archive

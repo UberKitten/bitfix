@@ -233,7 +233,7 @@ fn load_lua_files<P: AsRef<Path>>(path: P) -> Result<Vec<LuaFile>> {
         }
         Err(e) => {
             warn!(
-                "unable to read fixes dir {}: {} — no fixes will be applied",
+                "unable to read fixes dir {}: {}. No fixes will be applied.",
                 path.as_ref().display(),
                 e
             );
@@ -289,7 +289,7 @@ fn category_title(category: &str) -> String {
 
 fn render_cfg(metas: &[FixMeta], existing: &HashMap<String, bool>) -> String {
     let mut buf = String::new();
-    buf.push_str("# bitfix.cfg — edit true/false to toggle fixes.\n");
+    buf.push_str("# bitfix.cfg: edit true/false to toggle fixes.\n");
     buf.push_str("# This file is regenerated on each launch; custom comments will be removed.\n");
     buf.push_str("# Entries are grouped by the category declared in each fix's .lua file.\n");
     buf.push_str("#\n");
@@ -490,7 +490,7 @@ fn exec_patches<'wrapper, 'memory>(
         }
 
         if active.is_empty() {
-            info!("no fixes enabled — see bitfix.cfg to turn some on");
+            info!("no fixes enabled. See bitfix.cfg to turn some on.");
             return Ok(());
         }
 

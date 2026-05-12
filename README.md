@@ -1,32 +1,26 @@
 # bitfix
 
-A small Lua-scriptable runtime binary patcher for Windows games. Ships with a curated set of fixes for **Deep Rock Galactic** that load via a proxy DLL.
+A small Lua-scriptable runtime binary patcher for Windows games. Ships with a curated set of fixes for **Deep Rock Galactic**.
 
 ## Install
 
-1. Download the latest [bitfix.zip](https://github.com/UberKitten/bitfix/releases/latest/download/bitfix.zip) (this link always points to the newest build — bookmark it). Older builds are listed on the [releases page](https://github.com/UberKitten/bitfix/releases) if you ever need to roll back.
-2. Extract the zip somewhere temporary.
-3. Find your game's main `.exe`. For Deep Rock Galactic on Steam this is usually:
-   ```
-   <Steam>\steamapps\common\Deep Rock Galactic\FSD\Binaries\Win64\FSD-Win64-Shipping.exe
-   ```
-4. Copy these next to that `.exe`:
-   - `bitfix.dll` — **rename it to one of:** `d3d9.dll`, `d3d11.dll`, or `x3daudio1_7.dll` (whichever the game loads; for DRG, `x3daudio1_7.dll` works).
-   - The `fixes/` folder.
-5. Launch the game. bitfix will run, create `bitfix.cfg` next to the game `.exe`, and apply any enabled fixes. A log is written to `bitfix.txt`.
+1. Download [bitfix.zip](https://github.com/UberKitten/bitfix/releases/latest/download/bitfix.zip).
+2. Find the folder containing the game's `.exe`. For Deep Rock Galactic on Steam:
+   - Right-click DRG in Steam, **Manage > Browse local files**
+   - Open `FSD\Binaries\Win64\`. You should see `FSD-Win64-Shipping.exe` in there.
+3. Extract everything from the zip into that folder.
+4. Launch the game. Crash fixes apply automatically. A `bitfix.cfg` file and a `bitfix.txt` log are created next to the game `.exe` on first launch.
 
-## Enabling / disabling fixes
+## Enabling and disabling fixes
 
-After the first launch you'll have a `bitfix.cfg` file next to the game `.exe`. Open it in Notepad. It looks like:
+The first time you launch the game after installing, bitfix creates a `bitfix.cfg` file next to the game `.exe`. Open it in Notepad. It will look something like:
 
 ```
-# Role tags:
-#   [host-side]   = effective only when you host the lobby
-#   [client-side] = effective on your machine regardless of host
-
 # === Crash Fixes ===
-increased_players_crash_fix              = true  # [host-side] Fix crash when >8 players in lobby...
-increased_players_difficulty_scaling_fix = true  # [host-side] Allow difficulty scaling beyond 4 players...
+drg_csg_arena_bump                       = true   # [host-side] Add +2 GiB of reserved VA to every FSDVirtualMem arena...
+drg_expanding_array_uncap                = true   # [host-side] Dead-code the hardcoded MAXSIZE check...
+increased_players_crash_fix              = true   # [host-side] Fix crash when >8 players in lobby...
+increased_players_difficulty_scaling_fix = true   # [host-side] Allow difficulty scaling beyond 4 players...
 
 # === Gameplay ===
 max_attackers                = false  # [host-side] Raise simultaneous-attacker cap to 200
@@ -35,32 +29,33 @@ non_flare_devouring_drop_pod = false  # [host-side] Stop the drop pod from eatin
 stickier_flame               = false  # [host-side] Sticky flames stick to any actor, not just terrain
 
 # === Visual ===
-normal_terrain_scanner_mat = false  # [client-side] Show normal terrain on the scanner...
+normal_terrain_scanner_mat = false  # [client-side] Show normal terrain on the scanner instead of scanner material
 ```
 
-Flip a `false` to `true` (or vice versa) for any fix you want, save the file, and launch the game.
+Flip `false` to `true` for any fix you want, save the file, then launch the game.
 
-Notes:
-- **Role tags** tell you when a fix actually does anything. `[host-side]` fixes only take effect on the host's machine — turning one on as a client/joiner is harmless but does nothing. `[client-side]` fixes apply on whoever's screen they affect, regardless of who's hosting.
-- Crash fixes are on by default; everything else is off. You don't have to edit anything to get the crash fixes.
-- The file is regenerated each launch in canonical form, so any personal comments you add will be removed. Toggled values are preserved.
-- Sharing a config? Send a friend your `bitfix.cfg` — they drop it next to the `.exe` and they're done.
+**Role tags** tell you when a fix actually does something:
+
+- `[host-side]` only takes effect on the host's machine. Turning one on while you join someone else's lobby is harmless but does nothing.
+- `[client-side]` takes effect on your local machine regardless of who hosts.
+
+Crash fixes are on by default. Everything else is off.
 
 ## Will this slow down my game?
 
-No measurable in-game impact. bitfix does all of its work once while the game is starting up — it scans the game binary for the patterns of each enabled fix and writes a few bytes per match — then it's done. There's no hook, no callback, and no Lua running during gameplay; the patches are just static byte changes to the binary in memory.
+No measurable in-game impact. bitfix does all of its work once while the game is starting up. It scans the game binary for the patterns of each enabled fix, writes a few bytes per match, and is done. There's no hook, no callback, and no Lua running during gameplay; the patches are just static byte changes to the binary in memory.
 
 Startup adds maybe a second or two while the pattern scan runs. That's it.
 
 ## Uninstall
 
-Delete the file you renamed `bitfix.dll` to (e.g. `x3daudio1_7.dll`) and the `fixes/` folder. The game goes back to vanilla. You can also delete `bitfix.cfg` and `bitfix.txt` if you want a clean wipe.
+Delete `x3daudio1_7.dll` and the `fixes/` folder from your game folder. The game goes back to vanilla. You can also delete `bitfix.cfg` and `bitfix.txt` if you want a clean wipe.
 
 ## Something broken?
 
-1. Check `bitfix.txt` next to the game `.exe` — it logs every loaded fix, every pattern match, and any errors.
+1. Check `bitfix.txt` next to the game `.exe`. It logs every loaded fix, every pattern match, and any errors.
 2. If a fix's pattern didn't match the current game build, you'll see `no pattern match for <fix>/<label>` in the log. Disable that fix in `bitfix.cfg` and report it.
-3. To rule out bitfix entirely, just delete the renamed DLL and launch the game.
+3. To rule out bitfix entirely, delete `x3daudio1_7.dll` from the game folder and launch.
 
 ## Writing your own fix
 
@@ -97,8 +92,8 @@ Rust nightly (pinned via `rust-toolchain.toml`).
 cargo build --release
 ```
 
-The output `target/release/bitfix.dll` is the artifact. CI cross-compiles for `x86_64-pc-windows-gnu` on every push to `master` and publishes a release zip.
+The output is `target/release/bitfix.dll`. CI cross-compiles for `x86_64-pc-windows-gnu` on every push to `master` and publishes a release zip with the DLL renamed to `x3daudio1_7.dll`.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).
