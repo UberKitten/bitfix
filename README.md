@@ -4,7 +4,7 @@ A small Lua-scriptable runtime binary patcher for Windows games. Ships with a cu
 
 ## Install
 
-1. Download the latest `bitfix-<sha>.zip` from the [releases page](https://github.com/UberKitten/bitfix/releases).
+1. Download the latest [bitfix.zip](https://github.com/UberKitten/bitfix/releases/latest/download/bitfix.zip) (this link always points to the newest build — bookmark it). Older builds are listed on the [releases page](https://github.com/UberKitten/bitfix/releases) if you ever need to roll back.
 2. Extract the zip somewhere temporary.
 3. Find your game's main `.exe`. For Deep Rock Galactic on Steam this is usually:
    ```

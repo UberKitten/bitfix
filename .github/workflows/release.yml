@@ -11,14 +11,39 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Variables
-        id: vars
-        run: echo sha_short=${GITHUB_SHA::7} >> $GITHUB_OUTPUT
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history so we can build a changelog from previous tag
 
-      - uses: actions/checkout@master
+      - name: Compute version / tag / changelog
+        id: meta
+        run: |
+          set -euo pipefail
+          version=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+          sha_short=${GITHUB_SHA::7}
+          tag="v${version}-${sha_short}"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "sha_short=${sha_short}" >> "$GITHUB_OUTPUT"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
 
-      - name: Install package
-        run: sudo apt-get update && sudo apt-get install gcc-mingw-w64
+          prev=$(git tag -l 'v*' --sort=-creatordate | head -n1 || true)
+          {
+            echo "## Changes"
+            echo ""
+            if [ -z "$prev" ] || ! git rev-parse "$prev" >/dev/null 2>&1; then
+              git log --pretty='format:- %s' -n 20
+            else
+              echo "_Since [${prev}](../../releases/tag/${prev})_"
+              echo ""
+              git log --pretty='format:- %s (%h)' "${prev}..HEAD"
+            fi
+            echo ""
+            echo ""
+            echo "Built from \`${GITHUB_SHA}\`."
+          } > release-notes.md
+
+      - name: Install mingw-w64
+        run: sudo apt-get update && sudo apt-get install -y gcc-mingw-w64
 
       - uses: dtolnay/rust-toolchain@master
         with:
@@ -35,14 +60,14 @@ jobs:
           cp -r fixes staging/
 
       - name: Archive
-        run: cd staging && zip -r ../${{ github.event.repository.name }}-${{ steps.vars.outputs.sha_short }}.zip .
+        run: cd staging && zip -r ../bitfix.zip .
 
       - name: Release
-        uses: "marvinpinto/action-automatic-releases@latest"
+        uses: softprops/action-gh-release@v2
         with:
-          repo_token: "${{ secrets.GITHUB_TOKEN }}"
-          automatic_release_tag: "latest"
-          prerelease: true
-          title: "Development Build"
-          files: |
-            ${{ github.event.repository.name }}-${{ steps.vars.outputs.sha_short }}.zip
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: bitfix ${{ steps.meta.outputs.tag }}
+          body_path: release-notes.md
+          files: bitfix.zip
+          fail_on_unmatched_files: true
+          make_latest: "true"
