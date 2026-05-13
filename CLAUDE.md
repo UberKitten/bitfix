@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-bitfix is a Lua-scriptable runtime binary patcher for Windows games. It builds as a `cdylib` that gets dropped next to the target `.exe` under a name the game's loader will pull in. We hijack `winmm.dll` because UE4 imports it eagerly for multimedia timing. We initially tried `xinput1_3.dll` but DRG's xinput load is lazy and the DLL never got loaded; `winmm` loads at exe-init time and works reliably. This also keeps us out of mint's way — mint deploys its combined loader at `d3d11.dll` (which embeds an old bitfix v0.1.0 inside it). Proxy DLL forwarding to the real system DLL is handled by the `proxy_dll` crate.
+bitfix is a Lua-scriptable runtime binary patcher for Windows games. It builds as a `cdylib` that gets dropped next to the target `.exe` under a name the game's loader will pull in. We hijack `winmm.dll` because UE4 imports it eagerly for multimedia timing. We initially tried `xinput1_3.dll` but DRG's xinput load is lazy and the DLL never got loaded; `winmm` loads at exe-init time and works reliably. This also keeps us out of mint's way — mint (the DRG mod loader) deploys its hook at `x3daudio1_7.dll` on Steam / `d3d9.dll` on Xbox (see `mint_lib/src/lib.rs:71` in trumank/mint). mint's hook is built on the same `proxy_dll` + `patternsleuth` stack by the same author but is a separate binary configured for engine-function detours, not for our Lua patches. Proxy DLL forwarding to the real system DLL is handled by the `proxy_dll` crate.
 
 ## Build / test
 
