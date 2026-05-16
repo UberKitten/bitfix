@@ -10,8 +10,11 @@ Compatible with [mint](https://github.com/trumank/mint), the third-party DRG mod
 2. Find the folder containing the game's `.exe`. For Deep Rock Galactic on Steam:
    - Right-click DRG in Steam, **Manage > Browse local files**
    - Open `FSD\Binaries\Win64\`. You should see `FSD-Win64-Shipping.exe` in there.
+   - On a default Windows + Steam setup this folder is `C:\Program Files (x86)\Steam\steamapps\common\Deep Rock Galactic\FSD\Binaries\Win64\`.
 3. Extract everything from the zip into that folder, replacing existing files when prompted.
 4. Launch the game. Crash fixes apply automatically. A `bitfix.cfg` file and a `bitfix.txt` log are created next to the game `.exe` on first launch.
+
+**Don't drop the files in the top-level `Deep Rock Galactic\` folder.** That folder also contains an `FSD.exe` (a small launcher), but bitfix has to sit next to the real game executable at `FSD\Binaries\Win64\FSD-Win64-Shipping.exe`. If `bitfix.txt` never appears after launching, you probably installed one level too high.
 
 **Updating is the same process** — download the latest zip and extract over the top. Your `bitfix.cfg` toggles are preserved.
 
@@ -64,19 +67,19 @@ Startup adds maybe a second or two while the pattern scan runs. That's it.
 
 ### Catching new crashes
 
-When a fresh crash shows up that nobody has a fix for yet, the most useful thing you can do is collect a **full crash dump** and share it. To enable full dumps:
+When a fresh crash shows up that nobody has a fix for yet, the most useful thing you can do is collect a **full crash dump** and share it.
+
+To enable full dumps:
 
 1. In Steam, right-click **Deep Rock Galactic > Properties**.
 2. Under **General > Launch Options**, add: `-fullcrashdumpalways`
 3. Close Properties. The next time the game crashes, a full dump is written automatically.
 
-Dumps land in:
+To find the dump:
 
-```
-%LOCALAPPDATA%\FSD\Saved\Crashes\
-```
-
-(paste that into Explorer's address bar). Each crash gets its own timestamped subfolder containing the dump (`.dmp`), a log, and metadata. Zip up the whole subfolder if you want to share.
+1. Right-click DRG in Steam, **Manage > Browse local files**.
+2. Open `FSD\Saved\Crashes\`. On a default Windows + Steam setup this is `C:\Program Files (x86)\Steam\steamapps\common\Deep Rock Galactic\FSD\Saved\Crashes\`.
+3. Each crash is its own timestamped subfolder containing the dump (`.dmp`), a log, and metadata. Zip up the whole subfolder if you want to share.
 
 **Warning:** full dumps are large. Each one is typically 2-5 GB and they pile up fast. Clear the `Crashes\` folder periodically, or remove `-fullcrashdumpalways` from launch options once you've captured what you need. Without that flag, the game writes much smaller minidumps that often miss the data you'd need to diagnose a new crash.
 
