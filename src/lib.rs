@@ -636,6 +636,56 @@ mod test {
         Ok(())
     }
 
+    // Validates the real drg_gc_poison_ref_skip.lua against a synthetic copy
+    // of the GC token-reference guard idiom. Confirms the JZ (0F 84) opcode2 at
+    // pattern offset +4 flips to JLE (0F 8E) and that NOTHING else is touched
+    // (rel32 displacements + the deref must be byte-identical after patching).
+    #[test]
+    fn test_drg_gc_poison_ref_skip() -> Result<()> {
+        let base = 0x1000;
+        // Exact bytes from FSD-Win64-Shipping.exe @ RVA 0x1e49b6f, with a
+        // leading + trailing sentinel byte to prove the patch is localized:
+        //   48 85 C0              TEST RAX,RAX
+        //   0F 84 96 FE FF FF     JZ   continue   <- opcode2 (84) is the patch target
+        //   84 C9                 TEST CL,CL
+        //   0F 85 8E FE FF FF     JNZ  continue
+        //   8B 40 0C              MOV  EAX,[RAX+0xc]
+        let mut data = [
+            0xAA, // sentinel (must stay)
+            0x48, 0x85, 0xC0, 0x0F, 0x84, 0x96, 0xFE, 0xFF, 0xFF, 0x84, 0xC9, 0x0F, 0x85, 0x8E,
+            0xFE, 0xFF, 0xFF, 0x8B, 0x40, 0x0C,
+            0xBB, // sentinel (must stay)
+        ];
+        let mut memory = VirtualMemory::default();
+        memory.map_page(base, &mut data);
+
+        let body = std::fs::read_to_string(
+            concat!(env!("CARGO_MANIFEST_DIR"), "/fixes/drg_gc_poison_ref_skip.lua"),
+        )
+        .expect("read drg_gc_poison_ref_skip.lua");
+        let files = vec![LuaFile {
+            file_stem: "drg_gc_poison_ref_skip".to_string(),
+            body,
+        }];
+
+        exec_patches(&mut memory, files, None)?;
+
+        // The match starts at base+1 (after the sentinel); JZ opcode2 is at +4.
+        let expected = [
+            0xAA, //
+            0x48, 0x85, 0xC0, 0x0F, 0x8E, 0x96, 0xFE, 0xFF, 0xFF, 0x84, 0xC9, 0x0F, 0x85, 0x8E,
+            0xFE, 0xFF, 0xFF, 0x8B, 0x40, 0x0C, //
+            0xBB,
+        ];
+        assert_eq!(
+            memory.page(0).memory,
+            expected,
+            "only the JZ opcode2 (offset +4 in the match = index 5 in buffer) should flip 0x84->0x8E"
+        );
+
+        Ok(())
+    }
+
     #[test]
     fn test_cfg_roundtrip() {
         let metas = vec![
