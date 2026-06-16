@@ -18,6 +18,26 @@ Compatible with [mint](https://github.com/trumank/mint), the third-party DRG mod
 
 **Updating is the same process** — download the latest zip and extract over the top. Your `bitfix.cfg` toggles are preserved.
 
+## Linux / Proton / Steam Deck
+
+Install the files exactly as above, then add one extra step: Proton won't load the files unless you tell it to. If the game launches but no `bitfix.cfg` or `bitfix.txt` shows up, this is why.
+
+In Steam, right-click **Deep Rock Galactic > Properties > General > Launch Options** and paste one of these in:
+
+**bitfix only:**
+
+```
+WINEDLLOVERRIDES="winmm=n,b" %command%
+```
+
+**bitfix and [mint](https://github.com/trumank/mint) together:**
+
+```
+WINEDLLOVERRIDES="winmm=n,b;x3daudio1_7=n,b" %command%
+```
+
+Then launch the game. `bitfix.cfg` and `bitfix.txt` should show up next to the game `.exe` like normal.
+
 ## Uninstall
 
 Delete `winmm.dll` and the `fixes/` folder from your game folder. The game goes back to vanilla. You can also delete `bitfix.cfg` and `bitfix.txt` if you want a clean wipe.
