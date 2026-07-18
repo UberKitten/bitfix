@@ -637,23 +637,27 @@ mod test {
     }
 
     // Validates the real drg_gc_poison_ref_skip.lua against a synthetic copy
-    // of the GC token-reference guard idiom. Confirms the JZ (0F 84) opcode2 at
-    // pattern offset +4 flips to JLE (0F 8E) and that NOTHING else is touched
-    // (rel32 displacements + the deref must be byte-identical after patching).
+    // of the extended GC token-reference guard idiom. Confirms that the
+    // permanent-pool flag becomes an RAX low-bit marker, JZ becomes JLE, and
+    // TEST CL,CL becomes TEST AL,7. Branch displacements, the dereference, and
+    // surrounding sentinel bytes must remain byte-identical.
     #[test]
     fn test_drg_gc_poison_ref_skip() -> Result<()> {
         let base = 0x1000;
-        // Exact bytes from FSD-Win64-Shipping.exe @ RVA 0x1e49b6f, with a
+        // Exact bytes from FSD-Win64-Shipping.exe @ RVA 0x1e49b69, with a
         // leading + trailing sentinel byte to prove the patch is localized:
+        //   B1 01                 MOV  CL,1       <- becomes OR AL,1
+        //   EB 02                 JMP  guard
+        //   32 C9                 XOR  CL,CL
         //   48 85 C0              TEST RAX,RAX
-        //   0F 84 96 FE FF FF     JZ   continue   <- opcode2 (84) is the patch target
-        //   84 C9                 TEST CL,CL
+        //   0F 84 96 FE FF FF     JZ   continue   <- becomes JLE
+        //   84 C9                 TEST CL,CL      <- becomes TEST AL,7
         //   0F 85 8E FE FF FF     JNZ  continue
         //   8B 40 0C              MOV  EAX,[RAX+0xc]
         let mut data = [
             0xAA, // sentinel (must stay)
-            0x48, 0x85, 0xC0, 0x0F, 0x84, 0x96, 0xFE, 0xFF, 0xFF, 0x84, 0xC9, 0x0F, 0x85, 0x8E,
-            0xFE, 0xFF, 0xFF, 0x8B, 0x40, 0x0C,
+            0xB1, 0x01, 0xEB, 0x02, 0x32, 0xC9, 0x48, 0x85, 0xC0, 0x0F, 0x84, 0x96, 0xFE, 0xFF,
+            0xFF, 0x84, 0xC9, 0x0F, 0x85, 0x8E, 0xFE, 0xFF, 0xFF, 0x8B, 0x40, 0x0C,
             0xBB, // sentinel (must stay)
         ];
         let mut memory = VirtualMemory::default();
@@ -670,17 +674,18 @@ mod test {
 
         exec_patches(&mut memory, files, None)?;
 
-        // The match starts at base+1 (after the sentinel); JZ opcode2 is at +4.
+        // The match starts at base+1 (after the sentinel). Modified offsets in
+        // the match are +0, +10, +15, and +16.
         let expected = [
             0xAA, //
-            0x48, 0x85, 0xC0, 0x0F, 0x8E, 0x96, 0xFE, 0xFF, 0xFF, 0x84, 0xC9, 0x0F, 0x85, 0x8E,
-            0xFE, 0xFF, 0xFF, 0x8B, 0x40, 0x0C, //
+            0x0C, 0x01, 0xEB, 0x02, 0x32, 0xC9, 0x48, 0x85, 0xC0, 0x0F, 0x8E, 0x96, 0xFE, 0xFF,
+            0xFF, 0xA8, 0x07, 0x0F, 0x85, 0x8E, 0xFE, 0xFF, 0xFF, 0x8B, 0x40, 0x0C, //
             0xBB,
         ];
         assert_eq!(
             memory.page(0).memory,
             expected,
-            "only the JZ opcode2 (offset +4 in the match = index 5 in buffer) should flip 0x84->0x8E"
+            "only the permanent marker, JLE opcode, and alignment test should change"
         );
 
         Ok(())
