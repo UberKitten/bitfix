@@ -4,15 +4,16 @@ A small Lua-scriptable runtime binary patcher for Windows games. Ships with a cu
 
 Compatible with [mint](https://github.com/trumank/mint), the third-party DRG mod manager. mint and bitfix coexist; you can run both.
 
-## Install (and update)
+## Install or update
 
 1. Download [bitfix.zip](https://github.com/UberKitten/bitfix/releases/latest/download/bitfix.zip).
 2. Find the folder containing the game's `.exe`. For Deep Rock Galactic on Steam:
    - Right-click DRG in Steam, **Manage > Browse local files**
    - Open `FSD\Binaries\Win64\`. You should see `FSD-Win64-Shipping.exe` in there.
    - On a default Windows + Steam setup this folder is `C:\Program Files (x86)\Steam\steamapps\common\Deep Rock Galactic\FSD\Binaries\Win64\`.
-3. Extract everything from the zip into that folder, replacing existing files when prompted.
-4. Launch the game. Crash fixes apply automatically. A `bitfix.cfg` file and a `bitfix.txt` log are created next to the game `.exe` on first launch.
+3. Extract everything from the zip into that folder, replacing existing files when prompted. Keep the window open.
+4. Launch the game. Crash fixes apply automatically.
+5. Check that `bitfix.cfg` file and a `bitfix.txt` log are created next to the game `.exe` on first launch. If not, please double check you followed the steps and let me know. If using Linux, see the section below.
 
 **Don't drop the files in the top-level `Deep Rock Galactic\` folder.** That folder also contains an `FSD.exe` (a small launcher), but bitfix has to sit next to the real game executable at `FSD\Binaries\Win64\FSD-Win64-Shipping.exe`. If `bitfix.txt` never appears after launching, you probably installed one level too high.
 
