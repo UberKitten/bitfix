@@ -37,7 +37,7 @@ WINEDLLOVERRIDES="winmm=n,b" %command%
 WINEDLLOVERRIDES="winmm=n,b;x3daudio1_7=n,b" %command%
 ```
 
-Then launch the game. `bitfix.cfg` and `bitfix.txt` should show up next to the game `.exe` like normal.
+Then launch the game. `bitfix.cfg` and `bitfix.txt` should show up next to the game `.exe` like normal. You should only need to do this once.
 
 ## Uninstall
 
