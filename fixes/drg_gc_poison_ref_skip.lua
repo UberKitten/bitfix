@@ -1,5 +1,5 @@
---[[ Hardens DRG's UE4 FastReferenceCollector against impossible UObject*
-     values in token-stream reference slots.
+--[[ Hardens DRG's UE4 FastReferenceCollector against the observed classes of
+     impossible UObject* values in token-stream reference slots.
 
   =================== Crash family ===================
 
@@ -31,6 +31,18 @@
   so they are correlation/background conditions rather than a sufficient
   root cause.
 
+  A 2026-08-05 recurrence then proved that alignment alone was also
+  incomplete. The v2 patch matched and was enabled at all 24 sites, but the
+  saved fault context and token-stream slot both contained:
+
+      RAX = 0x0000000000010000
+      MOV EAX,[RAX+0xC] -> AV reading 0x000000000001000C
+
+  That value is positive and 16-byte aligned, so it passed both v2 checks.
+  Read-only sampling of the unchanged relaunch found 489,268 non-null live
+  GUObjectArray entries: all 489,268 were 16-byte aligned, none were at or
+  below 0x10000, and the minimum was 0x0000019580053600.
+
   =================== Original collector sequence ===================
 
   Each of the 24 reference-token cases has this layout (rel32 differs):
@@ -49,48 +61,56 @@
   precedes this sequence selects MOV CL,1 or XOR CL,CL. Both conditional
   branches target the same token-loop continue label.
 
-  =================== Version 2 patch ===================
+  =================== Version 3 patch ===================
 
-  Three in-place substitutions preserve instruction lengths and branch
-  destinations:
+  The 23 bytes before the dereference are rewritten in place:
 
-      B1 01       MOV CL,1       ->  0C 01       OR AL,1
-      0F 84       JZ continue    ->  0F 8E       JLE continue
-      84 C9       TEST CL,CL     ->  A8 07       TEST AL,7
+      EB 10                       JMP permanent_skip
+      90 90                       NOP; NOP
+      A8 07                       TEST AL,7
+      75 0A                       JNZ invalid_skip
+      48 3D 00 00 01 00          CMP RAX,0x10000
+      7E 02                       JLE invalid_skip
+      EB 05                       JMP dereference
+  invalid_skip:
+      E9 <existing rel32>         JMP continue
+  dereference:
+      8B 40 0C                    MOV EAX,[RAX+C]
 
   Resulting logic:
 
-      if (RAX == 0 || bit63(RAX))       goto continue;
-      if (is_permanent) RAX.low_bit = 1;
+      if (is_permanent)                 goto continue;
       if ((RAX & 7) != 0)               goto continue;
+      if ((int64_t)RAX <= 0x10000)      goto continue;
       index = RAX->InternalIndex;
 
-  The OR executes only on the path already classified as permanent and
-  already destined to skip. It deliberately tags that otherwise-valid RAX
-  value so the reused TEST AL,7 keeps the original permanent-object behavior.
-  On the ordinary-object path, XOR CL,CL remains but RAX is untouched.
-
-  The JLE retains version 1's null/sign-set protection. TEST AL,7 adds an
-  eight-byte-alignment requirement and catches both positive text-shaped
-  values observed on 2026-07-17. No trampoline, code cave, allocation, new
-  call, or branch relocation is required.
+  The permanent-object entry now jumps directly to the shared skip. Ordinary
+  pointers must be 8-byte aligned and, by signed comparison, greater than
+  0x10000. That one comparison rejects null, all sign-set values, and the new
+  aligned near-null value. The invalid-path E9 reuses the original JNZ rel32
+  bytes at offsets +19..+22: both old and new instructions end at +23, so its
+  destination remains exactly the original token-loop continue label. No
+  trampoline, code cave, allocation, new call, or branch relocation is used.
 
   =================== Safety evidence ===================
 
   - UObject/FUObjectItem object pointers are allocator-aligned. Sampling
     39,477 non-null GUObjectArray entries from the two full 2026-07-17 dumps
     found 39,477/39,477 aligned to 16 bytes; the patch requires only 8.
+    The 2026-08-05 live sample added 489,268/489,268 aligned to 16 bytes.
   - The two crashing values have low bits 5 and 2 and are rejected.
-  - Null and all sign-set values remain rejected by JLE.
-  - A permanent object is still skipped: OR AL,1 sets the exact bit tested
-    by TEST AL,7, and that path never dereferences the tagged value.
-  - An ordinary aligned pointer is unchanged and reaches the original MOV.
-  - All substitutions are length-preserving. The existing rel32 targets and
-    every instruction address after the guard remain unchanged.
+  - The 0x10000 crashing value is rejected by the signed low-address compare.
+  - Null and all sign-set values remain rejected by the same comparison.
+  - A permanent object still jumps directly to the original continue label.
+  - An ordinary aligned pointer above 0x10000 reaches the original MOV.
+  - The rewrite is length-preserving. The reused rel32 target and every
+    instruction address after the guard remain unchanged.
   - The extended signature below matches exactly 24 sites in build 141575.
 
-  This remains a consumer-side safety net. It prevents this GC dereference
-  from consuming an impossible slot value; it does not identify or repair
+  This remains a consumer-side safety net, not a general pointer validator.
+  It rejects the poison shapes observed in this crash family before this GC
+  dereference. An aligned positive garbage value above 0x10000 (including an
+  LA48-noncanonical value) can still pass. The fix does not identify or repair
   the upstream overwrite, and it cannot protect unrelated consumers.
 
   =================== Target build ===================
@@ -103,15 +123,14 @@
 
 return {
     name = "DRG GC Invalid-Reference Skip",
-    description = "GC skips null, sign-set, permanent, or misaligned reference slots instead of dereferencing impossible UObject pointers",
+    description = "GC skips permanent references and rejects observed null, low-address, sign-set, or misaligned poison before dereference",
     category = "crash",
     role = "client",
     default = true,
     patches = {
         {
-            -- Extended signature includes the permanent-pool flag setup so
-            -- it can be converted into an RAX low-bit marker. Both rel32s
-            -- still point to the same token-loop continue label.
+            -- Extended signature includes the permanent-pool flag setup and
+            -- both original branches to the token-loop continue label.
             --
             --   +00  B1 01                    MOV CL,1
             --   +02  EB 02                    JMP +2
@@ -125,18 +144,33 @@ return {
             match = function(ctx)
                 local address = ctx:address()
 
-                -- Permanent path: MOV CL,1 -> OR AL,1. That path already
-                -- skips; tagging RAX lets the shared alignment test retain
-                -- the original behavior without adding instructions.
-                ctx[address + 0] = 0x0C
+                -- Permanent entry -> shared invalid/continue jump at +18.
+                ctx[address + 0] = 0xEB
+                ctx[address + 1] = 0x10
+                ctx[address + 2] = 0x90
+                ctx[address + 3] = 0x90
 
-                -- Null/sign guard: JZ -> JLE (same rel32 destination).
-                ctx[address + 10] = 0x8E
+                -- Ordinary entry: reject misalignment, then reject signed
+                -- values <= 0x10000 (null, near-null, and sign-set).
+                ctx[address + 4] = 0xA8
+                ctx[address + 5] = 0x07
+                ctx[address + 6] = 0x75
+                ctx[address + 7] = 0x0A
+                ctx[address + 8] = 0x48
+                ctx[address + 9] = 0x3D
+                ctx[address + 10] = 0x00
+                ctx[address + 11] = 0x00
+                ctx[address + 12] = 0x01
+                ctx[address + 13] = 0x00
+                ctx[address + 14] = 0x7E
+                ctx[address + 15] = 0x02
 
-                -- Permanent marker OR natural misalignment -> skip.
-                -- TEST CL,CL -> TEST AL,7 (same two-byte length).
-                ctx[address + 15] = 0xA8
-                ctx[address + 16] = 0x07
+                -- Valid pointers hop over the shared E9 to the dereference.
+                -- Invalid pointers reuse the original JNZ rel32 bytes at
+                -- +19..+22; E9 at +18 ends at the same +23 address.
+                ctx[address + 16] = 0xEB
+                ctx[address + 17] = 0x05
+                ctx[address + 18] = 0xE9
             end
         }
     }

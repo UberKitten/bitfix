@@ -637,21 +637,20 @@ mod test {
     }
 
     // Validates the real drg_gc_poison_ref_skip.lua against a synthetic copy
-    // of the extended GC token-reference guard idiom. Confirms that the
-    // permanent-pool flag becomes an RAX low-bit marker, JZ becomes JLE, and
-    // TEST CL,CL becomes TEST AL,7. Branch displacements, the dereference, and
-    // surrounding sentinel bytes must remain byte-identical.
+    // of the extended GC token-reference guard idiom. Confirms the exact v3
+    // bytes and branch topology while preserving the original continue target,
+    // dereference, and surrounding sentinel bytes.
     #[test]
     fn test_drg_gc_poison_ref_skip() -> Result<()> {
         let base = 0x1000;
         // Exact bytes from FSD-Win64-Shipping.exe @ RVA 0x1e49b69, with a
         // leading + trailing sentinel byte to prove the patch is localized:
-        //   B1 01                 MOV  CL,1       <- becomes OR AL,1
+        //   B1 01                 MOV  CL,1       <- permanent entry
         //   EB 02                 JMP  guard
         //   32 C9                 XOR  CL,CL
         //   48 85 C0              TEST RAX,RAX
-        //   0F 84 96 FE FF FF     JZ   continue   <- becomes JLE
-        //   84 C9                 TEST CL,CL      <- becomes TEST AL,7
+        //   0F 84 96 FE FF FF     JZ   continue
+        //   84 C9                 TEST CL,CL
         //   0F 85 8E FE FF FF     JNZ  continue
         //   8B 40 0C              MOV  EAX,[RAX+0xc]
         let mut data = [
@@ -660,12 +659,14 @@ mod test {
             0xFF, 0x84, 0xC9, 0x0F, 0x85, 0x8E, 0xFE, 0xFF, 0xFF, 0x8B, 0x40, 0x0C,
             0xBB, // sentinel (must stay)
         ];
+        let original = data;
         let mut memory = VirtualMemory::default();
         memory.map_page(base, &mut data);
 
-        let body = std::fs::read_to_string(
-            concat!(env!("CARGO_MANIFEST_DIR"), "/fixes/drg_gc_poison_ref_skip.lua"),
-        )
+        let body = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/fixes/drg_gc_poison_ref_skip.lua"
+        ))
         .expect("read drg_gc_poison_ref_skip.lua");
         let files = vec![LuaFile {
             file_stem: "drg_gc_poison_ref_skip".to_string(),
@@ -674,21 +675,83 @@ mod test {
 
         exec_patches(&mut memory, files, None)?;
 
-        // The match starts at base+1 (after the sentinel). Modified offsets in
-        // the match are +0, +10, +15, and +16.
+        // The match starts at base+1 (after the sentinel). The original JNZ
+        // displacement at +19..+22 and dereference at +23..+25 are preserved.
         let expected = [
             0xAA, //
-            0x0C, 0x01, 0xEB, 0x02, 0x32, 0xC9, 0x48, 0x85, 0xC0, 0x0F, 0x8E, 0x96, 0xFE, 0xFF,
-            0xFF, 0xA8, 0x07, 0x0F, 0x85, 0x8E, 0xFE, 0xFF, 0xFF, 0x8B, 0x40, 0x0C, //
+            0xEB, 0x10, 0x90, 0x90, 0xA8, 0x07, 0x75, 0x0A, 0x48, 0x3D, 0x00, 0x00, 0x01, 0x00,
+            0x7E, 0x02, 0xEB, 0x05, 0xE9, 0x8E, 0xFE, 0xFF, 0xFF, 0x8B, 0x40, 0x0C, //
             0xBB,
         ];
         assert_eq!(
             memory.page(0).memory,
             expected,
-            "only the permanent marker, JLE opcode, and alignment test should change"
+            "v3 guard rewrite should preserve the rel32, dereference, and sentinels"
         );
 
+        let patched = &memory.page(0).memory;
+        let match_start = 1;
+        let rel8_target = |instruction: usize| {
+            (instruction as isize + 2 + patched[instruction + 1] as i8 as isize) as usize
+        };
+
+        // Both external entries converge on the reused near jump at +18;
+        // valid ordinary references hop over it to the unchanged MOV at +23.
+        assert_eq!(rel8_target(match_start), match_start + 18);
+        assert_eq!(rel8_target(match_start + 6), match_start + 18);
+        assert_eq!(rel8_target(match_start + 14), match_start + 18);
+        assert_eq!(rel8_target(match_start + 16), match_start + 23);
+
+        let original_jz_disp = i32::from_le_bytes(
+            original[match_start + 11..match_start + 15]
+                .try_into()
+                .unwrap(),
+        ) as isize;
+        let original_jnz_disp = i32::from_le_bytes(
+            original[match_start + 19..match_start + 23]
+                .try_into()
+                .unwrap(),
+        ) as isize;
+        let patched_jmp_disp = i32::from_le_bytes(
+            patched[match_start + 19..match_start + 23]
+                .try_into()
+                .unwrap(),
+        ) as isize;
+        let original_jz_target = base as isize + match_start as isize + 15 + original_jz_disp;
+        let original_jnz_target = base as isize + match_start as isize + 23 + original_jnz_disp;
+        let patched_jmp_target = base as isize + match_start as isize + 23 + patched_jmp_disp;
+
+        assert_eq!(original_jz_target, original_jnz_target);
+        assert_eq!(patched_jmp_target, original_jnz_target);
+
         Ok(())
+    }
+
+    // Documents the intended signed-boundary semantics separately from the
+    // emitted-byte test above. This deliberately records the residual scope:
+    // aligned positive garbage above 64 KiB is not full pointer validation.
+    #[test]
+    fn test_drg_gc_poison_ref_skip_boundaries() {
+        let guard_skips = |is_permanent: bool, rax: u64| {
+            is_permanent || (rax & 7) != 0 || (rax as i64) <= 0x1_0000
+        };
+
+        assert!(guard_skips(true, 0x0000_0195_8005_3600));
+        assert!(guard_skips(false, 0));
+        assert!(guard_skips(false, 1));
+        assert!(guard_skips(false, 0xFFFF));
+        assert!(guard_skips(false, 0x1_0000));
+        assert!(guard_skips(false, u64::MAX));
+        assert!(guard_skips(false, 0xFFFF_FFFF_FFFF_FFF8));
+        assert!(guard_skips(false, 0x0065_0065_0053_0065));
+        assert!(guard_skips(false, 0x0043_005F_0050_0042));
+
+        assert!(!guard_skips(false, 0x1_0008));
+        assert!(!guard_skips(false, 0x0000_0195_8005_3600));
+        assert!(
+            !guard_skips(false, 0x0000_8000_0000_0000),
+            "the 23-byte guard intentionally does not reject every LA48-noncanonical value"
+        );
     }
 
     #[test]
